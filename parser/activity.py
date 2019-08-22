@@ -1,4 +1,5 @@
 import csv
+import gettext
 from collections import defaultdict
 from datetime import date, timedelta
 from fractions import Fraction
@@ -18,20 +19,24 @@ class ActivityFieldIds:
 
 class Dividends:
 
-    def __init__(self, country):
+    def __init__(self, ticker, country):
+        self.ticker = ticker
         self.country = country
         self.dividends = Fraction()
+        self.dividends_float = 0
         self.withholding_taxes = Fraction()
+        self.withholding_taxes_float = 0
 
     def __str__(self):
-        return self.country + ', ' + str(round_fraction(self.dividends)) + ', ' + str(
-            round_fraction(self.withholding_taxes))
+        return '{}, {}, {}, {}'.format(self.ticker, self.country, self.dividends_float, self.withholding_taxes_float)
 
     def add_dividend(self, dividend):
         self.dividends += dividend
+        self.dividends_float = round_fraction(self.dividends)
 
     def add_withholding_tax(self, withholding_tax):
         self.withholding_taxes += withholding_tax
+        self.withholding_taxes_float = round_fraction(self.withholding_taxes)
 
 
 def round_fraction(fraction):
@@ -48,9 +53,18 @@ def find_csv_file(location):
 
 
 def parse_dividends(year=2018):
+    def print_dividends():
+        with open('dividends.csv', 'wt', newline='') as file_out:
+            csv_out = csv.DictWriter(file_out, ['country', 'ticker', 'dividends_float', 'withholding_taxes_float'],
+                                     extrasaction='ignore')
+            csv_out.writeheader()
+            csv_out.writerows(list(dividends_to_print.__dict__ for dividends_to_print in dividends_by_ticker.values()))
+
     csv_in = csv.DictReader(find_csv_file('../input/activity/').open(), fieldnames=[ActivityFieldIds.statement_type,
                                                                                     ActivityFieldIds.row_type])
     currency_rates = parse_currencies(year)
+    finnish = gettext.translation('iso3166', pycountry.LOCALES_DIR, languages=['fi'])
+    finnish.install()
     dividends_by_ticker = {}
     for row in csv_in:
         statement_type = row.get(ActivityFieldIds.statement_type)
@@ -63,6 +77,7 @@ def parse_dividends(year=2018):
                 country_code = description[1][:2]
                 country_code = country_code if country_code.isalpha() else 'US'
                 country = pycountry.countries.get(alpha_2=country_code).name
+                country = _(country)
                 timestamp = date.fromisoformat(row.get(ActivityFieldIds.date))
                 if timestamp.year != year:
                     continue
@@ -71,7 +86,7 @@ def parse_dividends(year=2018):
                 while not currency_rates[currency].get(timestamp):
                     timestamp -= timedelta(days=1)
                 amount_in_base_currency = amount / currency_rates[currency][timestamp]
-                dividends = dividends_by_ticker.setdefault(ticker, Dividends(country))
+                dividends = dividends_by_ticker.setdefault(ticker, Dividends(ticker, country))
                 if statement_type == 'Dividends':
                     dividends.add_dividend(amount_in_base_currency)
                 else:
@@ -79,12 +94,14 @@ def parse_dividends(year=2018):
 
     sum_of_dividends = Fraction()
     sum_of_withholding_taxes = Fraction()
-    for ticker, dividends in dividends_by_ticker.items():
-        print(ticker, dividends)
-        sum_of_dividends += dividends.dividends
-        sum_of_withholding_taxes += dividends.withholding_taxes
+    for dividends in dividends_by_ticker.values():
+        if dividends.dividends > 0:
+            sum_of_dividends += dividends.dividends
+            sum_of_withholding_taxes += dividends.withholding_taxes
+            print(dividends)
     print('\nTotal sum of dividends', round_fraction(sum_of_dividends), 'with paid taxes amounting to',
           round_fraction(sum_of_withholding_taxes))
+    print_dividends()
 
 
 def parse_currencies(year):
