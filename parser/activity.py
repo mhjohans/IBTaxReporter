@@ -24,9 +24,6 @@ class Dividends:
         self.withholding_taxes = Fraction()
 
     def __str__(self):
-        def round_fraction(fraction):
-            return round(float(fraction), 2)
-
         return self.country + ', ' + str(round_fraction(self.dividends)) + ', ' + str(
             round_fraction(self.withholding_taxes))
 
@@ -35,6 +32,10 @@ class Dividends:
 
     def add_withholding_tax(self, withholding_tax):
         self.withholding_taxes += withholding_tax
+
+
+def round_fraction(fraction):
+    return round(float(fraction), 2)
 
 
 def find_csv_file(location):
@@ -52,7 +53,8 @@ def parse_dividends(year=2018):
     currency_rates = parse_currencies(year)
     dividends_by_ticker = {}
     for row in csv_in:
-        if row.get(ActivityFieldIds.statement_type) == 'Dividends':
+        statement_type = row.get(ActivityFieldIds.statement_type)
+        if statement_type == 'Dividends' or statement_type == 'Withholding Tax':
             if row.get(ActivityFieldIds.row_type) == 'Header':
                 csv_in.fieldnames += row.get(None)
             elif row.get(ActivityFieldIds.description):
@@ -70,12 +72,19 @@ def parse_dividends(year=2018):
                     timestamp -= timedelta(days=1)
                 amount_in_base_currency = amount / currency_rates[currency][timestamp]
                 dividends = dividends_by_ticker.setdefault(ticker, Dividends(country))
-                dividends.add_dividend(amount_in_base_currency)
+                if statement_type == 'Dividends':
+                    dividends.add_dividend(amount_in_base_currency)
+                else:
+                    dividends.add_withholding_tax(amount_in_base_currency)
+
     sum_of_dividends = Fraction()
+    sum_of_withholding_taxes = Fraction()
     for ticker, dividends in dividends_by_ticker.items():
         print(ticker, dividends)
         sum_of_dividends += dividends.dividends
-    print('\nTotal sum of dividends', round(float(sum_of_dividends), 2))
+        sum_of_withholding_taxes += dividends.withholding_taxes
+    print('\nTotal sum of dividends', round_fraction(sum_of_dividends), 'with paid taxes amounting to',
+          round_fraction(sum_of_withholding_taxes))
 
 
 def parse_currencies(year):
