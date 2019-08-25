@@ -7,6 +7,8 @@ from decimal import Decimal
 from pathlib import Path
 
 import pycountry
+import requests
+from bs4 import BeautifulSoup
 
 
 class ActivityFieldIds:
@@ -21,20 +23,34 @@ class ActivityFieldIds:
 class Dividends:
 
     def __init__(self, ticker, country):
+        def scrape_stock_name():
+            result = requests.get('https://finance.yahoo.com/quote/' + ticker)
+            if result.ok:
+                page_content = result.text
+                soup = BeautifulSoup(page_content, features='lxml')
+                name_tag = soup.find('h1')
+                if name_tag:
+                    ticker_and_name = name_tag.text
+                    ticker_divider_index = ticker_and_name.find('-')
+                    if ticker_divider_index != -1:
+                        return ticker_and_name[ticker_divider_index + 2:]
+            return ticker
+
+        self.name = scrape_stock_name()
         self.ticker = ticker
         self.country = country
         self.dividends = Decimal()
         self.withholding_taxes = Decimal()
 
     def __str__(self):
-        return '{}, {}, {}, {}'.format(self.ticker, self.country, self.dividends, self.withholding_taxes)
+        return '{}, {}, {}, {}'.format(self.country, self.name, self.dividends, self.withholding_taxes)
 
     def add_dividend(self, dividend):
         self.dividends += dividend
         self.dividends = round(self.dividends, 2)
 
     def add_withholding_tax(self, withholding_tax):
-        self.withholding_taxes += withholding_tax
+        self.withholding_taxes += -withholding_tax
         self.withholding_taxes = round(self.withholding_taxes, 2)
 
 
@@ -50,10 +66,11 @@ def find_csv_file(location):
 def parse_dividends(year=2018):
     def print_dividends():
         with open('dividends.csv', 'wt', newline='') as file_out:
-            csv_out = csv.DictWriter(file_out, ['country', 'ticker', 'dividends', 'withholding_taxes'],
+            csv_out = csv.DictWriter(file_out, ['country', 'ticker', 'name', 'dividends', 'withholding_taxes'],
                                      extrasaction='ignore')
             csv_out.writeheader()
-            csv_out.writerows(list(dividends_to_print.__dict__ for dividends_to_print in dividends_by_ticker.values()))
+            csv_out.writerows(list(dividends_to_print.__dict__ for dividends_to_print in dividends_by_ticker.values() if
+                                   dividends_to_print.dividends > 0))
 
     csv_in = csv.DictReader(find_csv_file('../input/activity/').open(), fieldnames=[ActivityFieldIds.statement_type,
                                                                                     ActivityFieldIds.row_type])
@@ -82,7 +99,11 @@ def parse_dividends(year=2018):
                 while not currency_rates[currency].get(timestamp):
                     timestamp -= timedelta(days=1)
                 amount_in_base_currency = amount / currency_rates[currency][timestamp]
-                dividends = dividends_by_ticker.setdefault(ticker, Dividends(ticker, country))
+                if ticker in dividends_by_ticker:
+                    dividends = dividends_by_ticker[ticker]
+                else:
+                    dividends = Dividends(ticker, country)
+                    dividends_by_ticker[ticker] = dividends
                 if statement_type == 'Dividends':
                     dividends.add_dividend(amount_in_base_currency)
                 else:
