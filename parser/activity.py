@@ -1,8 +1,9 @@
 import csv
+import decimal
 import gettext
 from collections import defaultdict
 from datetime import date, timedelta
-from fractions import Fraction
+from decimal import Decimal
 from pathlib import Path
 
 import pycountry
@@ -22,25 +23,19 @@ class Dividends:
     def __init__(self, ticker, country):
         self.ticker = ticker
         self.country = country
-        self.dividends = Fraction()
-        self.dividends_float = 0
-        self.withholding_taxes = Fraction()
-        self.withholding_taxes_float = 0
+        self.dividends = Decimal()
+        self.withholding_taxes = Decimal()
 
     def __str__(self):
-        return '{}, {}, {}, {}'.format(self.ticker, self.country, self.dividends_float, self.withholding_taxes_float)
+        return '{}, {}, {}, {}'.format(self.ticker, self.country, self.dividends, self.withholding_taxes)
 
     def add_dividend(self, dividend):
         self.dividends += dividend
-        self.dividends_float = round_fraction(self.dividends)
+        self.dividends = round(self.dividends, 2)
 
     def add_withholding_tax(self, withholding_tax):
         self.withholding_taxes += withholding_tax
-        self.withholding_taxes_float = round_fraction(self.withholding_taxes)
-
-
-def round_fraction(fraction):
-    return round(float(fraction), 2)
+        self.withholding_taxes = round(self.withholding_taxes, 2)
 
 
 def find_csv_file(location):
@@ -55,7 +50,7 @@ def find_csv_file(location):
 def parse_dividends(year=2018):
     def print_dividends():
         with open('dividends.csv', 'wt', newline='') as file_out:
-            csv_out = csv.DictWriter(file_out, ['country', 'ticker', 'dividends_float', 'withholding_taxes_float'],
+            csv_out = csv.DictWriter(file_out, ['country', 'ticker', 'dividends', 'withholding_taxes'],
                                      extrasaction='ignore')
             csv_out.writeheader()
             csv_out.writerows(list(dividends_to_print.__dict__ for dividends_to_print in dividends_by_ticker.values()))
@@ -66,6 +61,7 @@ def parse_dividends(year=2018):
     finnish = gettext.translation('iso3166', pycountry.LOCALES_DIR, languages=['fi'])
     finnish.install()
     dividends_by_ticker = {}
+    decimal.getcontext().prec = 9
     for row in csv_in:
         statement_type = row.get(ActivityFieldIds.statement_type)
         if statement_type == 'Dividends' or statement_type == 'Withholding Tax':
@@ -82,7 +78,7 @@ def parse_dividends(year=2018):
                 if timestamp.year != year:
                     continue
                 currency = row.get(ActivityFieldIds.currency)
-                amount = Fraction(row.get(ActivityFieldIds.amount))
+                amount = Decimal(row.get(ActivityFieldIds.amount))
                 while not currency_rates[currency].get(timestamp):
                     timestamp -= timedelta(days=1)
                 amount_in_base_currency = amount / currency_rates[currency][timestamp]
@@ -92,15 +88,15 @@ def parse_dividends(year=2018):
                 else:
                     dividends.add_withholding_tax(amount_in_base_currency)
 
-    sum_of_dividends = Fraction()
-    sum_of_withholding_taxes = Fraction()
+    sum_of_dividends = Decimal()
+    sum_of_withholding_taxes = Decimal()
     for dividends in dividends_by_ticker.values():
         if dividends.dividends > 0:
             sum_of_dividends += dividends.dividends
             sum_of_withholding_taxes += dividends.withholding_taxes
             print(dividends)
-    print('\nTotal sum of dividends', round_fraction(sum_of_dividends), 'with paid taxes amounting to',
-          round_fraction(sum_of_withholding_taxes))
+    print('\nTotal sum of dividends', sum_of_dividends, 'with paid taxes amounting to',
+          sum_of_withholding_taxes)
     print_dividends()
 
 
@@ -112,7 +108,7 @@ def parse_currencies(year):
         timestamp = date.fromisoformat(row.get('Date'))
         if year - 1 <= timestamp.year <= year + 1:
             for currency in currencies:
-                rate = Fraction(row.get(currency)) if currency != 'EUR' else Fraction(1)
+                rate = Decimal(row.get(currency)) if currency != 'EUR' else Decimal(1)
                 daily_rate_by_currency[currency][timestamp] = rate
     return daily_rate_by_currency
 
