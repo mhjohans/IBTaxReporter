@@ -1,13 +1,10 @@
 import csv
 
-from printer import get_output_folder
+from csvprinter import get_csv_file
 
 
 def print_to_csv(dividends_by_ticker):
-    def get_file():
-        return get_output_folder() + "dividends.csv"
-
-    file = get_file()
+    file = get_csv_file('dividends.csv')
     with open(file, 'w+', newline='') as file_out:
         csv_out = csv.DictWriter(file_out, ['country', 'ticker', 'name', 'dividends', 'withholding_taxes'],
                                  extrasaction='ignore')

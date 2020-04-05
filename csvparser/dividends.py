@@ -5,46 +5,31 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pycountry
-import requests
-from bs4 import BeautifulSoup
 
-import csvparser
-import csvparser.currency as currencyparser
+import csvparser.currency as currency_parser
+from csvparser import scrape_stock_name, find_csv_file, get_input_folder
 
 
-class ActivityFieldIds:
+class DividendFieldIds:
     statement_type = '#st'
     row_type = '#rt'
-    amount = 'Amount'
-    description = 'Description'
     date = 'Date'
     currency = 'Currency'
+    description = 'Description'
+    amount = 'Amount'
 
 
 class Dividends:
 
     def __init__(self, ticker, country):
-        def scrape_stock_name():
-            result = requests.get('https://finance.yahoo.com/quote/' + ticker)
-            if result.ok:
-                page_content = result.text
-                soup = BeautifulSoup(page_content, features='lxml')
-                name_tag = soup.find('h1')
-                if name_tag:
-                    ticker_and_name = name_tag.text
-                    ticker_divider_index = ticker_and_name.find('-')
-                    if ticker_divider_index != -1:
-                        return ticker_and_name[ticker_divider_index + 2:]
-            return ticker
-
-        self.name = scrape_stock_name()
+        self.name = scrape_stock_name(ticker)
         self.ticker = ticker
         self.country = country
         self.dividends = Decimal()
         self.withholding_taxes = Decimal()
 
     def __str__(self):
-        return '{}, {}, {}, {}'.format(self.country, self.name, self.dividends, self.withholding_taxes)
+        return '{}, {}, {}, {}, {}'.format(self.country, self.ticker, self.name, self.dividends, self.withholding_taxes)
 
     def add_dividend(self, dividend):
         self.dividends += dividend
@@ -55,34 +40,34 @@ class Dividends:
         self.withholding_taxes = round(self.withholding_taxes, 2)
 
 
-def parse_dividends(year=2019):
-    csv_in = csv.DictReader(csvparser.find_csv_file(csvparser.get_input_folder('activity')).open(),
-                            fieldnames=[ActivityFieldIds.statement_type,
-                                        ActivityFieldIds.row_type])
-    currency_rates = currencyparser.parse_currencies(year)
+def parse_from_csv(year=2019):
+    csv_in = csv.DictReader(find_csv_file(get_input_folder('activity')).open(),
+                            fieldnames=[DividendFieldIds.statement_type,
+                                        DividendFieldIds.row_type])
+    currency_rates = currency_parser.parse_currencies(year)
     finnish = gettext.translation('iso3166', pycountry.LOCALES_DIR, languages=['fi'])
     finnish.install()
     dividends_by_ticker = {}
     decimal.getcontext().prec = 9
     for row in csv_in:
-        statement_type = row.get(ActivityFieldIds.statement_type)
+        statement_type = row.get(DividendFieldIds.statement_type)
         if statement_type == 'Dividends' or statement_type == 'Withholding Tax':
-            if row.get(ActivityFieldIds.row_type) == 'Header':
+            if row.get(DividendFieldIds.row_type) == 'Header':
                 csv_in.fieldnames += row.get(None)
-            elif row.get(ActivityFieldIds.description):
-                description = row.get(ActivityFieldIds.description).split('(')
+            elif row.get(DividendFieldIds.description):
+                description = row.get(DividendFieldIds.description).split('(')
                 ticker = description[0].strip()
                 country_code = description[1][:2]
                 country_code = country_code if country_code.isalpha() else 'US'
                 country = pycountry.countries.get(alpha_2=country_code).name
                 country = _(country)
-                timestamp = date.fromisoformat(row.get(ActivityFieldIds.date))
+                currency = row.get(DividendFieldIds.currency)
+                timestamp = date.fromisoformat(row.get(DividendFieldIds.date))
                 if timestamp.year != year:
                     continue
-                currency = row.get(ActivityFieldIds.currency)
-                amount = Decimal(row.get(ActivityFieldIds.amount))
                 while not currency_rates[currency].get(timestamp):
                     timestamp -= timedelta(days=1)
+                amount = Decimal(row.get(DividendFieldIds.amount))
                 amount_in_base_currency = amount / currency_rates[currency][timestamp]
                 if ticker in dividends_by_ticker:
                     dividends = dividends_by_ticker[ticker]
@@ -101,6 +86,6 @@ def parse_dividends(year=2019):
             sum_of_dividends += dividends.dividends
             sum_of_withholding_taxes += dividends.withholding_taxes
             print(dividends)
-    print('\nTotal sum of dividends', sum_of_dividends, '€ with paid taxes amounting to',
+    print('\nTotal sum of dividends', sum_of_dividends, '€ with paid withholding taxes amounting to',
           sum_of_withholding_taxes, '€')
     return dividends_by_ticker
