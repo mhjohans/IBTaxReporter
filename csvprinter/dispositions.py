@@ -10,5 +10,5 @@ def print_to_csv(dispositions_by_ticker):
                                  extrasaction='ignore')
         csv_out.writeheader()
         csv_out.writerows(
-            list(dispositions_to_print.__dict__ for dispositions_to_print in dispositions_by_ticker.values()))
+            list(dispositions.__dict__ for dispositions in dispositions_by_ticker.values()))
     print('Dispositions printed to', file)

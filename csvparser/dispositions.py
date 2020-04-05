@@ -45,7 +45,7 @@ def parse_from_csv(year=2019):
     csv_in = csv.DictReader(find_csv_file(get_input_folder('activity')).open(),
                             fieldnames=[DispositionFieldIds.statement_type,
                                         DispositionFieldIds.row_type])
-    currency_rates = currency_parser.parse_currencies(year)
+    currency_rates = currency_parser.parse_currencies(year, currency_parser.CurrencyTimeFrame.DAILY)
     dispositions_by_ticker = {}
     decimal.getcontext().prec = 9
     header_read = False

@@ -1,7 +1,7 @@
 import csv
 import decimal
 import gettext
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 import pycountry
@@ -44,7 +44,7 @@ def parse_from_csv(year=2019):
     csv_in = csv.DictReader(find_csv_file(get_input_folder('activity')).open(),
                             fieldnames=[DividendFieldIds.statement_type,
                                         DividendFieldIds.row_type])
-    currency_rates = currency_parser.parse_currencies(year)
+    currency_rates = currency_parser.parse_currencies(year, currency_parser.CurrencyTimeFrame.ANNUAL)
     finnish = gettext.translation('iso3166', pycountry.LOCALES_DIR, languages=['fi'])
     finnish.install()
     dividends_by_ticker = {}
@@ -65,10 +65,8 @@ def parse_from_csv(year=2019):
                 timestamp = date.fromisoformat(row.get(DividendFieldIds.date))
                 if timestamp.year != year:
                     continue
-                while not currency_rates[currency].get(timestamp):
-                    timestamp -= timedelta(days=1)
                 amount = Decimal(row.get(DividendFieldIds.amount))
-                amount_in_base_currency = amount / currency_rates[currency][timestamp]
+                amount_in_base_currency = amount / currency_rates[currency]
                 if ticker in dividends_by_ticker:
                     dividends = dividends_by_ticker[ticker]
                 else:
