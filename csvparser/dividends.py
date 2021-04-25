@@ -40,7 +40,7 @@ class Dividends:
         self.withholding_taxes = round(self.withholding_taxes, 2)
 
 
-def parse_from_csv(year=2019):
+def parse_from_csv(year):
     csv_in = csv.DictReader(find_csv_file(get_input_folder('activity')).open(),
                             fieldnames=[DividendFieldIds.statement_type,
                                         DividendFieldIds.row_type])

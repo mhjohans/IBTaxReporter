@@ -41,7 +41,7 @@ class Dispositions:
             self.losses = round(self.losses, 2)
 
 
-def parse_from_csv(year=2019):
+def parse_from_csv(year):
     csv_in = csv.DictReader(find_csv_file(get_input_folder('activity')).open(),
                             fieldnames=[DispositionFieldIds.statement_type,
                                         DispositionFieldIds.row_type])
